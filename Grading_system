@@ -1,0 +1,172 @@
+import streamlit as st
+import pandas as pd
+import os
+
+FILE_NAME = "data.csv"
+
+st.set_page_config(
+    page_title="Student Grade Management",
+    page_icon="🎓",
+    layout="wide"
+)
+
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f5f7fa;
+    }
+    h1 {
+        color: #2c3e50;
+        text-align: center;
+    }
+    .stButton>button {
+        background-color: #4a90e2;
+        color: white;
+        border-radius: 8px;
+        height: 2.8em;
+        font-weight: 600;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+def load_data():
+    if os.path.exists(FILE_NAME):
+        df = pd.read_csv(FILE_NAME)
+        df["ID"] = df["ID"].astype(str).str.strip()
+        return df
+    return pd.DataFrame(columns=["ID", "Name", "M1", "M2", "M3", "Total", "Average", "Grade"])
+
+def save_data(df):
+    df.to_csv(FILE_NAME, index=False)
+
+def calculate_grade(avg):
+    if avg >= 90: return "O"
+    elif avg >= 80: return "E"
+    elif avg >= 60: return "A"
+    elif avg >= 50: return "B"
+    elif avg >= 40: return "C"
+    return "F"
+
+st.title("🎓 Student Grade Management System")
+
+menu = st.sidebar.selectbox("Menu", [
+    "Add Student", "View Students", "Search Student",
+    "Update Student", "Delete Student", "Dashboard"
+])
+
+df = load_data()
+
+if menu == "Add Student":
+    st.subheader("➕ Add Student")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        sid = st.text_input("Student ID")
+        name = st.text_input("Name")
+
+    with col2:
+        m1 = st.number_input("Marks 1", 0, 100)
+        m2 = st.number_input("Marks 2", 0, 100)
+        m3 = st.number_input("Marks 3", 0, 100)
+
+    if st.button("Add Student"):
+        if sid.strip() == "" or name.strip() == "":
+            st.warning("Please fill all fields")
+        elif sid.strip() in df["ID"].values:
+            st.error("Student ID already exists!")
+        else:
+            total = m1 + m2 + m3
+            avg = total / 3
+            grade = calculate_grade(avg)
+
+            new_data = pd.DataFrame(
+                [[sid, name, m1, m2, m3, total, avg, grade]],
+                columns=df.columns
+            )
+
+            df = pd.concat([df, new_data], ignore_index=True)
+            save_data(df)
+
+            st.success(f"Student Added! Grade: {grade} 🎉")
+
+elif menu == "View Students":
+    st.subheader("📋 Student Records")
+
+    if df.empty:
+        st.warning("No data available")
+    else:
+        st.dataframe(df, use_container_width=True)
+
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇ Download CSV", csv, "students.csv", "text/csv")
+
+elif menu == "Search Student":
+    st.subheader("🔍 Search Student")
+
+    search_id = st.text_input("Enter Student ID")
+
+    if st.button("Search"):
+        result = df[df["ID"] == search_id.strip()]
+
+        if not result.empty:
+            st.success("Student Found ✅")
+            st.dataframe(result)
+        else:
+            st.error("Student not found ❌")
+
+elif menu == "Update Student":
+    st.subheader("✏ Update Student")
+
+    uid = st.text_input("Enter Student ID")
+
+    if uid.strip() in df["ID"].values:
+        student = df[df["ID"] == uid].iloc[0]
+
+        m1 = st.number_input("Marks 1", 0, 100, int(student["M1"]))
+        m2 = st.number_input("Marks 2", 0, 100, int(student["M2"]))
+        m3 = st.number_input("Marks 3", 0, 100, int(student["M3"]))
+
+        if st.button("Update"):
+            total = m1 + m2 + m3
+            avg = total / 3
+            grade = calculate_grade(avg)
+
+            df.loc[df["ID"] == uid, ["M1","M2","M3","Total","Average","Grade"]] = [m1, m2, m3, total, avg, grade]
+            save_data(df)
+
+            st.success("Student updated successfully!")
+    else:
+        st.info("Enter valid Student ID")
+
+elif menu == "Delete Student":
+    st.subheader("🗑 Delete Student")
+
+    delete_id = st.text_input("Enter Student ID")
+
+    if st.button("Delete"):
+        if delete_id in df["ID"].values:
+            df = df[df["ID"] != delete_id]
+            save_data(df)
+            st.success("Student deleted successfully")
+        else:
+            st.error("Student not found")
+
+elif menu == "Dashboard":
+    st.subheader("📊 Analytics Dashboard")
+
+    if df.empty:
+        st.warning("No data available")
+    else:
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Total Students", len(df))
+        col2.metric("Average Marks", round(df["Average"].mean(), 2))
+        col3.metric("Top Score", df["Total"].max())
+
+        st.markdown("### 📈 Grade Distribution")
+        st.bar_chart(df["Grade"].value_counts())
+
+        st.markdown("### 🥇 Topper")
+        topper = df.loc[df["Total"].idxmax()]
+        st.success(f"{topper['Name']} (ID: {topper['ID']}) - {topper['Total']} Marks")
